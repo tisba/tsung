@@ -386,7 +386,25 @@ handle_cast({newbeams, HostList}, State=#state{logdir   = LogDir,
             check_remotes_ok(RemoteNodes),
             ?LOG("All remote beams started, syncing ~n",?NOTICE),
             global:sync(),
-            ?LOG("Syncing done, start remote tsung application ~n", ?DEB),
+            ?LOG("Syncing done. ~n", ?DEB),
+
+            % Distributing files for local file servers if required
+            case length(Config#config.local_file_server) of
+                0 ->
+                    ?LOG("Local file servers: None defined~n", ?NOTICE),
+                    ok;
+                _ ->
+                    case ts_local_file_server:distribute_files(RemoteNodes, Config#config.local_file_server) of
+                        ok ->
+                            ?LOG("Local file servers: setup complete ~n", ?NOTICE);
+                        {error, Reason} ->
+                            ?LOGF("Local file servers: ~p~n", [Reason], ?ERR),
+                            ts_mon:abort(),
+                            exit({error, Reason})
+                    end
+            end,
+
+            ?LOG("Start remote tsung application ~n", ?DEB),
             {Resl, BadNodes} = rpc:multicall(RemoteNodes,tsung,start,[],?RPC_TIMEOUT),
             ?LOGF("RPC result: ~p ~p ~n",[Resl,BadNodes],?DEB),
             case BadNodes of
